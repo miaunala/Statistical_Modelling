@@ -1,0 +1,139 @@
+---
+title: "Term_Paper_Code"
+output: pdf_document
+date: "2023-12-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Statistical Modelling, HS23
+Nathalie Guibert
+18-796-516
+
+
+
+Setup
+
+```{r cars}
+setwd("C:/Users/whatt/iCloudDrive/UZH/Master/HS23/Polito/Statistical Modelling/Term Paper")
+
+
+library("tidyverse")
+library("haven")
+library("car")
+library("stargazer")
+library("lmtest")
+library("glm.predict")
+
+ESS10 <- read_dta("ESS10.dta")
+
+summary(ESS10$trstun) # Trust in the UN 
+ESS10$trstun <-
+  car::recode(ESS10$trstun, "0=0; 1=0; 2=0; 8=1; 9=1; 10=1; else=NA")
+# 0 rather no trust; 1 rather complete trust
+
+summary(ESS10$trstep) # Trust in the European Parliament 
+
+summary(ESS10$trstprl) # Trust in country's parliament
+
+
+summary(ESS10$cntry) # Country 
+summary(ESS10$imbgeco) # immigrants good/bad for country's economy
+summary(ESS10$atchctr) # How emotionally attached to [country] 
+summary(ESS10$edulvlb) # Highest level of education 
+ESS10$edulvlb <-
+  car::recode(ESS10$edulvlb, "0=0; 113=0; 129=1; 212=1; 213=1; 221=1; 222=1; 
+              223=1; 229=2; 311=2; 312=2; 313=2; 321=2; 322=2; 323=2; 412=2; 
+              413=2; 421=2; 422=2; 423=2; 510=3; 520=3; 610=3; 620=3; 710=3; 
+              720=3; 800=3; else=NA")
+
+summary(ESS10$domicil) # Domicile, respondent's description 
+ESS10$domicil <-
+  car::recode(ESS10$domicil, "1=0; 2=1; 3=1; 4=2; 5=2; else=NA")
+
+summary(ESS10$agea)
+ESS10 <- ESS10[ESS10$agea > 17,]
+
+
+summary(ESS10$hinctnta) # Household's total net income
+ESS10$hinctnta <-
+  car::recode(ESS10$hinctnta, "1=1; 2=1; 3=2; 4=2; 5=3; 6=3; 7=4; 8=4; 9=5; 
+              10=5; else=NA")
+
+summary(ESS10$uemp12m)
+
+
+ESS10$pspwght <- ESS10$pweight * ESS10$dweight
+summary(ESS10$pspwght) # Post-Stratification Weight
+
+# List of variables used in the logistic regression models
+vars_used <- c("trstun", "trstep", "trstprl", "imbgeco", "atchctr", "uemp12m", 
+               "edulvlb", "domicil", "hinctnta", "agea", "pspwght")
+
+# Create a new data frame with selected variables
+ESS10_filtered <- ESS10[, vars_used]
+
+# Remove rows with any missing values
+ESS10_filtered <- na.omit(ESS10_filtered)
+
+```
+
+Logistic Regression 
+
+``` {r}
+log_reg <- glm(trstun ~ trstep + trstprl + imbgeco +atchctr+ uemp12m + edulvlb + domicil + hinctnta + agea, family = binomial, data = ESS10_filtered, weights = ESS10_filtered$pspwght)
+
+stargazer::stargazer(list(log_reg), type = "text")
+```
+
+Logistic Regression without globalisation loser profile
+
+```{r}
+log_reg_wo <- glm(trstun ~ trstep + trstprl, family = binomial, data = ESS10_filtered, weights = ESS10_filtered$pspwght)
+
+stargazer::stargazer(list(log_reg_wo), type = "text")
+```
+
+Test whether Logistic  Regression with global loser profile or without global
+loser profile is more useful with waldtest.
+
+```{r}
+lmtest::waldtest(log_reg, log_reg_wo)
+```
+
+Odds Ratio
+
+```{r}
+exp(coef(log_reg))
+```
+
+Interaction effect country
+```{r}
+
+log_reg4_1 = glm(trstun ~ trstep + trstprl + imbgeco +atchctr+ uemp12m+ edulvlb + domicil + hinctnta + agea, family = binomial, data = ESS10 %>% filter(!is.na(cntry)), weights = pspwght)
+
+log_reg4_2 = glm(trstun ~ trstep*cntry + trstprl + imbgeco +atchctr+ uemp12m + edulvlb + domicil + hinctnta + agea, family = binomial, data = ESS10, weights = pspwght)
+
+texreg::screenreg(list(log_reg4_1,
+                       log_reg4_2))
+```
+
+
+
+Predicted probabilities 
+
+```{r}
+
+df_pred1 = predicts(log_reg, "0-10;mean;mean;mean;mode;mode;mode;mode;mean", 
+                    sim.count = 10000)
+ggplot(df_pred1, aes(x = trstep,
+                     y = mean, ymin = lower, ymax = upper)) +
+  geom_ribbon(fill=NA, col = "black", linetype = "dashed") + geom_line() +
+  scale_x_continuous(breaks=seq(0,10,1))+
+  theme_minimal() + 
+  scale_y_continuous(labels = scales::percent) + 
+  ylab("Predicted probability of having trust in the UN") +
+  xlab("Trust in the EU")
+`````````
