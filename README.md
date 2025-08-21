@@ -1,5 +1,5 @@
 # Statistical Modelling Homeworks
-A collection of homeworks done for the Statistical Modelling course at UZH in Fall Semester 2023.
+A collection of term paper and its code, as well as homeworks done for the Statistical Modelling course at UZH in Fall Semester 2023.
 
 From course catalogue:
 After a brief introduction to linear regression analysis, this module provides an overview of the most 
