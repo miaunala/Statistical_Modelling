@@ -1,0 +1,318 @@
+---
+title: "Homework_1_StatMod"
+name: Nathalie Guibert
+date: "2023-10-19"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/whatt/iCloudDrive/UZH/Master/HS23/Polito/Statistical Modelling/Homeworks/Homework 1")
+
+library(tidyverse)
+library(fixest) 
+library(lme4) 
+library(sjPlot) 
+library(texreg) 
+library(lmtest) 
+library(sandwich)
+library(haven)
+library(car)
+library(stats)
+
+ESS10 <- read_dta("ESS10.dta")
+```
+
+Data Cleaning and Filtering
+
+```{r}
+swiss_data <- filter(ESS10, cntry == "CH")
+
+swiss_model <- subset(swiss_data, select = c(cntry, atchctr, prtvthch, prtdgcl, imdfetn, agea, gndr, pspwght))
+
+
+# agea = Age of respondent, calculated  
+summary(swiss_model$agea)
+swiss_model <- subset(swiss_model, agea >= 18 )
+
+
+# gndr = Gender 
+summary(swiss_model$gndr)
+swiss_model$gndr <- car::recode(swiss_model$gndr, "1=1; 2=2; else=NA")
+
+
+# atchctr = How emotionally attached to [country] 
+summary(swiss_model$atchctr)
+swiss_model <- subset(swiss_model, atchctr <= 10)
+
+
+# prtdgcl = How close to party 
+summary(swiss_model$prtdgcl)
+swiss_model <- subset(swiss_model, prtdgcl <= 4)
+
+
+# imdfetn = Allow many/few immigrants of different 
+# race/ethnic group from majority
+summary(swiss_model$imdfetn)
+swiss_model <- subset(swiss_model, imdfetn <= 4)
+
+
+# prtvthch = Party voted for in last national election CH 
+summary(swiss_model$prtvthch)
+
+swiss_model <- swiss_model %>% 
+  mutate(prtvthch = 
+           case_when( 
+                    prtvthch == 1~"SVP",
+                    prtvthch == 2~"SP",
+                    prtvthch == 3~"FDP",
+                    prtvthch == 4~"CVP",
+                    prtvthch == 5~"Gruene",
+                    prtvthch == 6~"GLP",
+                    prtvthch == 7~"BDP",
+                    prtvthch == 8~"EVP",
+                    prtvthch > 17~NA_character_,
+                    TRUE ~ "other"
+                  
+                    )
+        ) 
+
+
+
+
+# Renaming of variables
+swiss_model <- plyr::rename(swiss_model, replace = c(gndr = "Gender", agea = "Age", prtvthch = "Party_Vote_CH", atchctr = "Emot_Attach", prtdgcl = "Closeness_Party", imdfetn = "Immig_Openness"), warn_missing = FALSE)
+
+```
+
+1. Linear Regression Model
+
+``` {r}
+
+linreg_1 = lm(Emot_Attach ~ Party_Vote_CH + Age + Gender, data = swiss_model, weights = pspwght)
+summary(linreg_1)
+
+texreg(linreg_1)
+```
+
+2. Statistical Difference between SP & CVP
+
+Solution: From the output of the linear hypothesis test, we cannot see a 
+significant difference between CVP and SP concerning the emotional attachment 
+to Switzerland as p>0.05 (0.6406).
+
+
+``` {r}
+linearHypothesis(linreg_1, "Party_Vote_CHCVP-Party_Vote_CHSP")
+```
+
+3. Influential data points 
+
+We find 10 outliers in our model. 60 data points are influential, as well. 2 of
+the outliers are influential.
+
+Outliers
+```{r}
+sum(abs(rstudent(linreg_1)) > 3)
+```
+
+Hat values
+
+```{r}
+hat <- hatvalues(linreg_1)
+sum(hat> 2 * mean(hat))
+```
+
+Influential Outliers
+
+```{r}
+sum(abs(rstudent(linreg_1)) > 3 & hat > 2 * mean(hat))
+```
+
+4. Simulate discrete changes
+
+Solution: The discrete changes remain the same over age and gender.
+
+```{r}
+# selected party: SP
+
+num <- 0
+
+dc_df <- data.frame(dc=NA, age=18:80, lower=NA, upper=NA)
+
+for(age in 18:80) {
+  
+  set.seed(21)
+  num <- num + 1
+  
+  beta = MASS::mvrnorm(1000, coef(linreg_1), 
+                         vcov(linreg_1))
+  # HAS TO BE CHANGED IF WE CHANGE THE CATEGORIES OF THE PARTY VOTE ABOVE
+  
+  # MALE
+  values_male = c(1, 0, 0, 0, 0, 0, 0, 1,0, age, 1)
+  
+  yhat_male =  beta %*% values_male
+  
+  
+  # FEMALE
+  
+  values_female = c(1, 0, 0, 0, 0, 0, 0, 1,0, age, 2)
+  
+  yhat_female =  beta %*% values_female
+  
+  
+  dc <- yhat_female - yhat_male
+  
+  
+  dc_df[num,1] <- mean(dc)
+  
+  dc_df[num,3:4] <- quantile(dc, probs= c(0.025, 0.975))
+  
+}
+
+ggplot(dc_df, aes(x=age, y=dc)) +
+  geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.2)+
+  geom_line(size= 0.5)+
+  theme_minimal()+
+  labs(y="Discrete Change", title = "Discrete change of gender, depending on 
+       age for SP")
+
+``` 
+
+
+5. Estimate model again with variable closeness to party as IV.
+
+Solution: The first model without the interaction seems Slightly better, 
+because of higher R^2 values. Therefore, the first model explains more 
+variance in the dependent variable than the second model with the interaction.
+
+
+```{r}
+summary(swiss_model$Closeness_Party)
+
+swiss_model$Closeness_Party <- 
+  car::recode(swiss_model$Closeness_Party, 
+              "1=1; 2=2; 3:4=3; else=NA")
+
+
+linreg_2 = lm(Emot_Attach ~ Party_Vote_CH + 
+                Closeness_Party + Age + Gender, data = swiss_model, weights = pspwght)
+summary(linreg_2)
+
+
+# müssen Party vote und closeness einzeln 
+# gelistet werden?
+linreg_3 = lm(Emot_Attach ~ Party_Vote_CH*
+                Closeness_Party + Age + Gender, data = swiss_model, weights = pspwght)
+summary(linreg_3)
+
+
+# Comparison
+
+anova(linreg_2, linreg_3)
+
+
+```
+
+6. ICC & Multilevel Regression (Emotional attachment to 
+country = DV)
+
+```{r}
+model_anova_hw = lmer(atchctr ~ 1 + (1 | cntry), data = ESS10, 
+                   weights = pspwght)
+summary(model_anova_hw)
+
+# ICC
+icc= 0.2579 / (0.2579 + 4.3731)
+icc
+```
+Solution: Since the ICC value is 0.05568992, the country variable 
+can barely explain emotional attachment, such that the individuals
+are close to completely different.This means that roughly 5.57% comes 
+from cross-country variation and the remains from individual variation.
+
+
+7. Multilevel model 
+
+Solution: Running the regression of the multilevel model, that people that 
+allow some to none immigrants of different race/ethnic group in their country
+are slightly more emotionally attached to their  country (0.2056467). This 
+value is significant, given by its t-value 6.070, which exceeds the threshold 
+of 1.96. Also with increasing age, there is also a slight positive effect on 
+emotional attachment to one's country, which is also significant (t-value of 
+34.859), however gender is not significant with a t-value below the threshold 
+1.96 (0.481).
+
+```{r}
+
+ESS10$imdfetn_2 <- 
+  car::recode(ESS10$imdfetn, 
+              "1=1; 2:4=2; else=NA")
+summary(ESS10$imdfetn_2)
+
+mulreg_1 = lmer(atchctr ~ agea + gndr + imdfetn_2 + (1 | cntry), 
+                data = ESS10, weights = pspwght)
+
+summary(mulreg_1)
+ranef(mulreg_1)
+texreg(mulreg_1)
+
+
+```
+8. Random intercept plot
+
+Solution: The following plot shows that Greece has the highest intercept and 
+North Macedonia the lowest.
+
+```{r}
+
+plot_model(mulreg_1, type = "re", sort.est = "(Intercept)") + theme_bw()
+
+```
+
+9. Random slope w/ immigrant variable
+
+Solution: We performed the likelihood ratio test and it was significant 
+(6.61e-13) on the 0.000 level. This means that the random slope adds a
+benefit to our model.
+
+```{r}
+
+model_rs = lmer(atchctr ~ agea + gndr + imdfetn_2 +(imdfetn_2 | cntry), data = ESS10,
+               weights = pspwght)
+
+model_rs
+
+lrtest(mulreg_1, model_rs)
+```
+
+10. Fixed Effects
+
+```{r}
+# Fixed Effects Model
+model_fixed_10 = feols(atchctr ~ agea + gndr + imdfetn_2 | cntry, 
+                    data = ESS10, weights = ESS10$pspwght)
+
+```
+
+```{r}
+# Fixed effects of Fixed Effects Model
+fixef(model_fixed_10)
+```
+
+```{r}
+summary(model_fixed_10)
+```
+
+```{r}
+# Fixed effects of Random Effects Model
+fixef(model_rs)
+```
+
+```{r}
+# Random Effects of Random Effects Model
+ranef(model_rs)
+```

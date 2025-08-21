@@ -1,0 +1,112 @@
+---
+title: "guibert_nathalie_AND_meier_wanja_AND_helbling_aline_HW3"
+output: pdf_document
+date: "2023-12-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("C:/Users/whatt/iCloudDrive/UZH/Master/HS23/Polito/Statistical Modelling/Homeworks/Homework3")
+
+library(tidyverse)
+library(MASS)
+library(fixest) 
+library(lme4) 
+library(glm.predict)
+library(sjPlot) 
+library(texreg) 
+library(lmtest) 
+library(sandwich)
+library(haven)
+library(texreg)
+library(car)
+library(brant)
+library(VGAM)
+library(stats)
+library(stargazer)
+library(ggplot2)
+library(nnet)
+
+
+
+assassin <-read_dta("assassin.dta") 
+trans2020 <- read_dta("trans2020.dta")
+```
+
+Part 1
+
+The file trans2020.dta is a Stata file containing data from the 2020 American National Election Studies. 
+The outcome variable of interest is the feeling thermometer toward transgendered people (trans). It runs 
+from 0 to 100 but contains missing data due to people refusing to answer the question or not recognizing 
+the concept. The indicator select takes on the value 0 for those that did not provide data on the outcome
+variable and 1 for everyone else.
+The data contain a number of predictor variables. First, bible takes on the value 1 if the survey 
+respondent believes the Bible to be the actual word of God and 0 otherwise. Second, pid is the 
+respondent’s partisanship, which runs from 1 (strong Democrat) to 7 (strong Republican). Third, leftright
+captures the respondent’s left-right ideology and runs from 0 (left) to 10 (right). The variable idstr 
+converts the placement into an ideological strength measure by computing |leftright − 5|. The higher the 
+score on this fourth predictor, the more intensely left or right the respondent’s ideology is. Fifth, ba 
+is a dummy variable that takes on the value of 1 for those holding BA’s or more advanced degrees and 0 
+otherwise. The sixth through seventh predictors are dummies for place of residence: (1) smalltown equals 
+1 for those residing in a small town and 0 otherwise; (2) suburban equals 1 for those residing in 
+suburbia and 0 otherwise; and (3) city equals 1 for city dwellers and 0 other-wise. If a respondent 
+scores 0 on all three residential dummy variables, then they live in a rural area. The eight predictor, 
+female, takes on the value 1 for female and 0 for male respondents. Finally, hetero equals 1 for 
+respondents who are self-declared heterosexuals and 0 otherwise.
+Imagine you have been contracted by a colleague to fit a Heckman sample selection model. Your colleague 
+believes that feelings toward transgender people depends on partisanship, leftright placement, education,
+gender, sexual orientation, beliefs about the Bible, and residential location. They are worried that the 
+missing values on the feeling thermometer are related to the underlying thermometer score. They also 
+believe that stronger ideologues and people with at least a BA are more likely to provide data on the 
+thermometer, whereas those who be-lieve the Bible to be the actual word of God are less inclined to do 
+so. To you falls the task of estimating and interpreting the Heckman model.
+
+
+
+```{r}
+summary(trans2020$trans)
+# 142 NAs remove them?
+
+summary(trans2020$select)
+# whether people answered trans question
+
+summary(trans2020$bible)
+# 0 people not in bible; 1 people believe in bible 
+
+summary(trans2020$pid)
+# partisanship
+
+summary(trans2020$leftright)
+# left-right ideology
+
+summary(trans2020$idstr)
+# strength of ideology
+
+summary(trans2020$ba)
+# ba holders
+
+
+# dummies for place of residence
+summary(trans2020$smalltown)
+summary(trans2020$suburban)
+summary(trans2020$city)
+# if zero for all three -> live in rural are
+
+summary(trans2020$female)
+# female = 1
+
+summary(trans2020$hetero)
+# hetero = 1
+
+```
+
+1. As a baseline, estimate an OLS regression of feelings toward trans-gendered people. Interpret the effect of believing the Bible to be the actual word of God. [10 points]
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

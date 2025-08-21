@@ -1,0 +1,207 @@
+---
+title: "guibert_nathalie_AND_meier_wanja_AND_helbling_aline_HW2"
+output: pdf_document
+date: "2023-11-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("C:/Users/whatt/iCloudDrive/UZH/Master/HS23/Polito/Statistical Modelling/Homeworks/Homework2")
+
+library(tidyverse)
+library(MASS)
+library(fixest) 
+library(lme4) 
+library(glm.predict)
+library(sjPlot) 
+library(texreg) 
+library(lmtest) 
+library(sandwich)
+library(haven)
+library(texreg)
+library(car)
+library(brant)
+library(VGAM)
+library(stats)
+library(stargazer)
+library(ggplot2)
+library(nnet)
+
+
+
+SFM16 <-read_dta("795_SFM16_Data_DE_v1.0.dta") 
+
+```
+
+
+```{r cars}
+summary(SFM16$q24std) # min 0 med 3 mean 4.442 max 60.000 NA 4198
+summary(SFM16$q24min) # min 0 med 0 mean 10.05 max 54.00  NA 4916
+summary(SFM16$q01)
+SFM16 <- subset(SFM16, q01 < 98)
+SFM16$q01 = factor(case_when(
+  SFM16$q01 == 1 ~ "Nie",
+  SFM16$q01 == 2 ~ "Weniger als einmal im Monat",
+  SFM16$q01 == 3 ~ "Einmal pro Monat",
+  SFM16$q01 == 4 ~ "Mehrmals pro Monat",
+  SFM16$q01 == 5 ~ "Einmal pro Woche",
+  SFM16$q01 == 6 ~ "Mehrmals pro Woche",
+  SFM16$q01 == 7 ~ "Jeden Tag",
+  TRUE ~ NA_character_,
+), levels = c("Nie","Weniger als einmal im Monat", "Einmal pro Monat", "Mehrmals pro Monat", "Einmal pro Woche", "Mehrmals pro Woche", "Jeden Tag")
+)
+
+summary(SFM16$age)
+summary(SFM16$sd02)
+summary(SFM16$q09b8)
+SFM16 <- subset(SFM16, q09b8 < 98)
+summary(SFM16$sd14)
+SFM16 <- subset(SFM16, sd14 < 98)
+SFM16$sd14 = factor(case_when(
+  SFM16$sd14 == 1 ~ "Vollzeit (90%-100%)",
+  SFM16$sd14 == 2 ~ "Teilzeit (70%-89%)",
+  SFM16$sd14 == 3 ~ "Teilzeit (69%-50%)",
+  SFM16$sd14 == 4 ~ "Teilzeit (weniger als 50%)",
+  SFM16$sd14 == 5 ~ "nicht erwebstätig",
+  TRUE ~ NA_character_,
+), levels = c("Vollzeit (90%-100%)", "Teilzeit (70%-89%)", "Teilzeit (50%-69%)", "Teilzeit (weniger als 50%)", "nicht erwerbstätig")
+)
+summary(SFM16$q29a6)
+summary(SFM16$q29a3)
+```
+
+Binary Dependent Variable
+
+In this part we want to invest on the influence on being active in a party (DV). We are interested if people who do voluntary work to change something are more likely active in a party. We use age and gender as control variables.
+
+Estimate the logistic regression model. Show the results in a nice table. Don't forget to weight the model. [10 points]
+
+```{r pressure, echo=FALSE}
+SFM16$q09b8 <- car::recode(SFM16$q09b8, "1=0; 2=1; else=NA")
+log_reg = glm(q09b8 ~ q29a6 + age + sd02, 
+                    data = SFM16, family = binomial(), weights = gew_totnorm)
+screenreg(log_reg)
+```
+
+Are the control variables useful for the model? Test them using a waldtest.
+
+```{r}
+log_reg2 = glm(q09b8 ~ q29a6, data = SFM16, family = binomial(), weights = gew_totnorm)
+waldtest(log_reg, log_reg2)
+```
+
+Since the p-value is extremely small, we conclude that the inclusion of the control variables (age and sd02) in Model 1 significantly improves the model fit compared to the simpler Model 2, which includes only q29a6. Therefore, based on the Wald test, it suggests that the control variables are useful for the model.
+
+Calculate the odds ratio for raison "change something" and interpret it. (Use the full model of 1.)
+
+```{r}
+exp(coef(log_reg))
+```
+
+For every unit increase in the variable that contains the reason to do voluntary work is to change something, the odds of being active in a party increase by a factor of 0.921. For every unit increase in age that would be an increase of 0.968 and for being female it increases by the factor of 4.043.
+
+Estimate a second model including an interaction between reason "change something" and work. Show the two models in a nice table next to each other. Which model is better according to the BIC?
+
+```{r}
+log_reg3 = glm(q09b8 ~ q29a6*sd14 + age + sd02, 
+                    data = SFM16, family = binomial(), weights = gew_totnorm)
+screenreg(log_reg3)
+
+
+stargazer(log_reg, log_reg3, title = "Logistic Regression Models", type = "text")
+bic_model1 <- BIC(log_reg)
+bic_model3 <- BIC(log_reg3)
+bic_model1 # 973.601
+bic_model3 # 655.9575
+```
+
+
+The second model (log_reg3) has a lower BIC score, thus is considered better in terms of model fit and complexity.
+
+Calculate predicted probabilities for reason "change something" with constant values for age and gender (e.g. mean/median/mode) using the model of ex. 1. Then plot the result (the plot should look nice as you would put it into a paper). You can use glm.predict for the task. Interpret the plot.
+
+```{r}
+pred_prob <- predicts(log_reg, "0-10;mean;mode") 
+pred_prob %>%
+  ggplot(aes(x = q29a6, y = mean, ymin = lower, ymax = upper)) +
+  geom_line() +
+  geom_ribbon(alpha = 0.4) +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(y = "Predicted Probability for being in a party", x = "Reason to change something with voluntary work") +
+  theme_bw()
+```
+
+The more somebody does voluntary work because of the reason to change something, the lower are the predicted probabilities of this person to be in a party. However, the confidence intervals here are rather big and the values high.
+
+Ordinal Dependent Variable 
+
+In this part we are interested on the influence how often people meet friends, relative or work colleagues in their free time. We are interested how it is influence by the time spent with voluntary work. Use again age and gender as control variables. Don't forget to weight the model. 
+
+6. Recode the variables q24std (hours) and q24min (minutes) into a single variable containing the hours with decimals of voluntary work. Create a nice looking histogram of the recoded variable. Note: On some participants one of the two is NA while the other has a value. Those NAs you should treat as a 0. Only if both are NA the new variable should also be NA.
+
+```{r}
+summary(SFM16$q24std)
+
+
+SFM16$total_hours <- with(SFM16, ifelse(is.na(q24std) & is.na(q24min), NA, ifelse(is.na(q24std), q24min / 60, ifelse(is.na(q24min), q24std, q24std + q24min / 60))))
+
+hist(SFM16$total_hours, breaks=70, main = "Total hours of voluntary work", xlab = "Voluntary work in hours", ylim = c(0, 400))
+
+```
+
+Estimate an appropriate ordinal logistic regression and show the results in a nice table.
+
+```{r}
+ord_log <- polr(q01 ~ total_hours + age + sd02, 
+                    data = SFM16, weights=gew_totnorm, Hess = TRUE)
+screenreg(ord_log)
+summary(SFM16$q01)
+```
+
+Test the parallel regression assumption. Does the assumption hold?
+
+```{r}
+brant(ord_log)
+```
+
+The coefficients for age and sd02 (gender) are over the 0.05 threshold and for those, the assumption holds. However, this is not the case for our main explanatory variable "total_hours" (of voluntary work), for which the parallel regression assumption does not hold. Normally, we would then test the model without the variable which violates the parallel regression assumption, however, since this is the main explanatory variable we decided not to.
+
+Simulate predicted probabilities with glm.predict for the time (you can use "Q100") while holding the control variables constant. Plot the result (the plot should look nice as you would put it into a paper) and interpret it.
+
+```{r}
+
+pred_prob2 = predicts(ord_log, "Q100;mean;mean", sim.count = 10000)
+pred_prob2$level = factor(pred_prob2$level, levels = levels(SFM16$q01))
+
+
+ggplot(pred_prob2, aes(x = total_hours, y = mean, ymin = lower, ymax = upper, fill = level, color = level)) +
+  geom_ribbon(alpha = 0.3) +
+  geom_line() +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual("How often meeting friends, family and colleagues", 
+                    values = c("firebrick", "red", "darkorange","gold", "darkolivegreen1", "darkseagreen", "darkgreen")) +
+  scale_color_manual("How often meeting friends, family and colleagues", 
+                    values = c("firebrick", "red", "darkorange","gold", "darkolivegreen1", "darkseagreen", "darkgreen")) +
+  xlab("Total hours spent volunteering") +
+  ylab("How often meeting people")
+```
+
+There are barely any people that never or only once meet their friends, family, and colleagues. While as meeting multiple times a month has also a relatively low predicted probability, it already showcases the direction of effect of also multiple times a month and once per week. It shows, that the more somebody spends volunteering, the lower the probability is meeting his/her friends, family, and colleagues multiple times a month or once per week. For multiple times a week and every day, the predicted probabilities show a different picture. Both go up with the time spent in volunteering, however, gets in both cases wider confidence intervals, with the multiple times a week falling and with every day rising. This could be due to the fact that when you are volunteering, you might be around friends, family, and colleagues, which is why you would also meet them, while volunteering.
+
+Nominal Dependent Variable 
+
+In this part we work with the working model (full time, part time, …) as dependent variable. We want investigate if people doing less voluntary work are more likely to work full time and if it interacts with reason "improve skills". Use again age and gender as control variables.
+
+Estimate the #multinomial logistic regression model and show the results in a nice table (hint: stargazer is better for #multinom then #texreg, but both are allowed). Don't forget to weight the model.
+
+```{r}
+mul_log_reg = multinom(sd14 ~ total_hours*q29a3 + age + sd02, data = SFM16, weights = gew_totnorm)
+stargazer(mul_log_reg)
+screenreg(mul_log_reg)
+```
+
+Visualize the interaction effect with predicted probabilities or discrete changes (use glm.predict). You can choose to what to set age and gender. The plot should be finished to be printed in a journal (aka should look good). (not all possible values need to be in the plot, but only the control variables can be constant)
+
+- we do not have this :(.)
