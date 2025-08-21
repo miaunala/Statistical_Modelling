@@ -8,4 +8,3 @@ The focus is on practical experience with programming the models in R as well as
 the results. The models can include those for categorical data, limited dependent variables, event counts and 
 durations, complex data structures (e.g. panel data) and systems of equations.
 
-Translated with DeepL.com (free version)
